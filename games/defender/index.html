@@ -24,6 +24,7 @@
     #abilities { display: flex; gap: 14px; margin-left: auto; font: 600 13px/1.2 system-ui, sans-serif; }
     #abilities span { opacity: 0.75; }
     #abilities span.ready { opacity: 1; color: #ffd98a; }
+    #wall-count { color: #c9e4ff; font: 600 13px/1.2 system-ui, sans-serif; }
 
     /* Big "Wave N" in the middle of the screen, during the pause between waves. */
     #wave-announce { position: fixed; inset: 0; display: grid; place-content: center;
@@ -114,6 +115,7 @@
       <span id="ability-rapid">Shift: Rapid — ready</span>
       <span id="ability-heal">H: Heal — ready</span>
     </div>
+    <div id="wall-count">Walls: 3</div>
   </div>
   <div id="wave-announce" hidden>Wave 1</div>
   <div id="damage-flash"></div>
@@ -134,6 +136,7 @@
     <h1>BASE DEFENDER</h1>
     <p>Hold the rig through <strong>20 waves</strong>.</p>
     <p>Move the mouse to aim. Hold <kbd>left click</kbd> to fire arrows.</p>
+    <p><kbd>Right click</kbd> the sand to place a wall (3 max).</p>
     <p>Click or press <kbd>Space</kbd> to start.</p>
   </div>
 

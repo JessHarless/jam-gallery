@@ -56,6 +56,11 @@ import {
   ABILITY_RAPID_MULTIPLIER,
   ABILITY_HEAL_COOLDOWN,
   ABILITY_HEAL_AMOUNT,
+  WALL_MAX_COUNT,
+  WALL_HP,
+  WALL_RADIUS,
+  WALL_MIN_PLACE_RADIUS,
+  WALL_MAX_PLACE_RADIUS,
 } from './tuning.js';
 import { getWavePlan, pickCorners } from './waves.js';
 import {
@@ -71,10 +76,11 @@ import {
   showStartScreen,
   hideStartScreen,
   updateAbilityHUD,
+  updateWalls,
 } from './ui.js';
 import { groundTexture } from './textures.js';
 import { initAudio, playShoot, playHit, playDamage } from './sounds.js';
-import { makeTower, makeGoblin, makeArrow, TOWER_MUZZLE_HEIGHT, TOWER_MUZZLE_Z } from './art.js';
+import { makeTower, makeGoblin, makeArrow, makeWall, TOWER_MUZZLE_HEIGHT, TOWER_MUZZLE_Z } from './art.js';
 import { showAbilityPick, hideAbilityPick } from './abilities.js';
 
 // --- Abilities picked after boss waves; restart puts them all back ---
@@ -261,6 +267,8 @@ let rapidEndTime = 0;                // >0 while rapid fire is active
 // Boss adds: { speed } and walks straight at the base.
 const drones = [];
 const shots = [];  // { mesh, direction, life }
+const walls = [];  // { mesh, hp, radius }
+let wallsRemaining = WALL_MAX_COUNT;
 
 // --- Mouse aim ---
 const pointer = new THREE.Vector2(0, 0);                  // mouse position in -1..1 screen space
@@ -299,7 +307,13 @@ addEventListener('pointerup', (event) => {
 });
 addEventListener('pointercancel', () => { firing = false; });
 addEventListener('blur', () => { firing = false; });          // no stuck trigger if the tab loses focus
-addEventListener('contextmenu', (event) => event.preventDefault());
+addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  if (!runStarted || gameOver || won || wallsRemaining <= 0) return;
+  initAudio();
+  updateAim();
+  tryPlaceWall(aimPoint.x, aimPoint.z);
+});
 
 addEventListener('keydown', (event) => {
   if (!loadingEl.hidden || event.repeat) return;
@@ -395,6 +409,41 @@ function resetAbilityCooldowns() {
   rapidCooldown = 0;
   healCooldown = 0;
   rapidEndTime = 0;
+}
+
+// --- Walls ---
+
+function tryPlaceWall(x, z) {
+  const distance = Math.hypot(x, z);
+  if (distance < WALL_MIN_PLACE_RADIUS || distance > WALL_MAX_PLACE_RADIUS) return;
+
+  // Don't stack walls on top of each other.
+  for (const wall of walls) {
+    if (Math.hypot(wall.mesh.position.x - x, wall.mesh.position.z - z) < WALL_RADIUS * 2) return;
+  }
+
+  const mesh = makeWall();
+  mesh.position.set(x, 0, z);
+  scene.add(mesh);
+  walls.push({ mesh, hp: WALL_HP, radius: WALL_RADIUS });
+  wallsRemaining -= 1;
+  updateWalls(wallsRemaining);
+}
+
+function updateWallsState(dt) {
+  for (let i = walls.length - 1; i >= 0; i--) {
+    if (walls[i].hp > 0) continue;
+    scene.remove(walls[i].mesh);
+    walls.splice(i, 1);
+    wallsRemaining += 1;
+    updateWalls(wallsRemaining);
+  }
+}
+
+function resetWalls() {
+  for (const wall of walls) scene.remove(wall.mesh);
+  walls.length = 0;
+  wallsRemaining = WALL_MAX_COUNT;
 }
 
 function updateShots(dt) {
@@ -671,11 +720,28 @@ function updateDrones(dt) {
     else if (drone.type === 'boss') updateBoss(drone, dt);
     else updateBlue(drone, dt);
 
+    // Walls block enemies: push the drone back to the wall's edge and damage the wall.
+    for (const wall of walls) {
+      const dx = position.x - wall.mesh.position.x;
+      const dz = position.z - wall.mesh.position.z;
+      const wallDist = Math.hypot(dx, dz);
+      const minDist = drone.radius + wall.radius;
+      if (wallDist >= minDist) continue;
+      const overlap = minDist - wallDist;
+      const nx = wallDist > 0.001 ? dx / wallDist : 1;
+      const nz = wallDist > 0.001 ? dz / wallDist : 0;
+      position.x += nx * overlap;
+      position.z += nz * overlap;
+      wall.hp -= DRONE_DAMAGE * dt;
+    }
+
     // Shrink back down after a hit. Only the group is scaled: the model inside keeps its own size.
     if (drone.hitFlash > 0) drone.hitFlash = Math.max(0, drone.hitFlash - dt);
     const pop = 1 + 0.5 * (drone.hitFlash / HIT_FLASH_TIME);
     drone.mesh.scale.setScalar(pop);
   }
+
+  updateWallsState(dt);
 }
 
 // Blue drones of every size: erratic flight, a fresh zigzag direction every DRONE_SWERVE_INTERVAL
@@ -764,6 +830,7 @@ function restart() {
 
   resetAbilities();
   resetAbilityCooldowns();
+  resetWalls();
   baseHp = BASE_HP;
   wave = START_WAVE;
   gameOver = false;
@@ -836,6 +903,7 @@ async function start() {
   initUI();
   updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
   updateAbilityHUD({ bomb: 0, rapid: 0, heal: 0, rapidEndTime: 0 });
+  updateWalls(wallsRemaining);
   showStartScreen();               // wait for the player to click / press Space
   lastFrameTime = performance.now(); // so the first frame's delta is not the whole load time
   renderer.setAnimationLoop(frame);

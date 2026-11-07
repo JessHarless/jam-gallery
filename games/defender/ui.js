@@ -18,6 +18,7 @@ export function initUI() {
   el.bomb = document.getElementById('ability-bomb');
   el.rapid = document.getElementById('ability-rapid');
   el.heal = document.getElementById('ability-heal');
+  el.walls = document.getElementById('wall-count');
 }
 
 // Show the title screen on first load.
@@ -110,4 +111,10 @@ export function updateAbilityHUD({ bomb, rapid, heal, rapidEndTime }) {
     el.heal.textContent = `H: Heal — ${heal.toFixed(1)}s`;
     el.heal.classList.remove(readyClass);
   }
+}
+
+// Update the wall counter in the HUD.
+export function updateWalls(remaining) {
+  if (!el.walls) return;
+  el.walls.textContent = `Walls: ${remaining}`;
 }
