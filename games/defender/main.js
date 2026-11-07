@@ -49,6 +49,13 @@ import {
   START_WAVE,
   WIN_WAVE,
   WAVE_PAUSE_SECONDS,
+  ABILITY_BOMB_COOLDOWN,
+  ABILITY_BOMB_DAMAGE,
+  ABILITY_RAPID_COOLDOWN,
+  ABILITY_RAPID_DURATION,
+  ABILITY_RAPID_MULTIPLIER,
+  ABILITY_HEAL_COOLDOWN,
+  ABILITY_HEAL_AMOUNT,
 } from './tuning.js';
 import { getWavePlan, pickCorners } from './waves.js';
 import {
@@ -61,6 +68,9 @@ import {
   flashBaseDamage,
   showWaveAnnounce,
   hideWaveAnnounce,
+  showStartScreen,
+  hideStartScreen,
+  updateAbilityHUD,
 } from './ui.js';
 import { groundTexture } from './textures.js';
 import { initAudio, playShoot, playHit, playDamage } from './sounds.js';
@@ -233,10 +243,17 @@ let waveCorners = [];                // [signX, signZ] corners this wave spawns 
 let cornerCursor = 0;                // which of those corners is next in line
 let gameOver = false;
 let won = false;                     // true once wave WIN_WAVE is cleared
+let runStarted = false;              // true once the player clicks through the start screen
 let runTime = 0;                     // seconds this run has lasted, stopped when it ends
 let firing = false;
 let fireCooldown = 0;
 let spawnTimer = 0;                  // counts down to the next drone of this wave
+
+// Active ability cooldowns (seconds remaining) and rapid-fire timer.
+let bombCooldown = 0;
+let rapidCooldown = 0;
+let healCooldown = 0;
+let rapidEndTime = 0;                // >0 while rapid fire is active
 
 // Every live enemy: blue (three sizes), red or boss. All carry { type, mesh, hp, hitFlash, hitRadius, radius }.
 // Blue adds: { variant, speed, heading, velocity, swerveTimer, dashTimer }
@@ -267,6 +284,7 @@ addEventListener('pointermove', (event) => {
 addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return; // left button only (right-click is for walls in M3)
   initAudio();                    // the first click is the gesture that starts the audio context
+  if (!runStarted) { startRun(); return; } // click through the title screen
   pointer.x = (event.clientX / innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / innerHeight) * 2 + 1;
   updateAim();                    // face where the click/tap landed
@@ -284,7 +302,14 @@ addEventListener('blur', () => { firing = false; });          // no stuck trigge
 addEventListener('contextmenu', (event) => event.preventDefault());
 
 addEventListener('keydown', (event) => {
-  if ((event.key === 'r' || event.key === 'R') && loadingEl.hidden) restart();
+  if (!loadingEl.hidden || event.repeat) return;
+  if (!runStarted && (event.key === ' ' || event.code === 'Space')) { startRun(); return; }
+  if (!runStarted) return;
+
+  if (event.key === 'r' || event.key === 'R') restart();
+  else if (event.key === ' ' || event.code === 'Space') useBomb();
+  else if (event.key === 'Shift') useRapid();
+  else if (event.key === 'h' || event.key === 'H') useHeal();
 });
 
 // --- Shooting ---
@@ -319,7 +344,57 @@ function updateFiring(dt) {
   if (fireCooldown > 0) fireCooldown = Math.max(0, fireCooldown - dt);
   if (!firing || fireCooldown > 0) return;
   shoot();
-  fireCooldown = FIRE_COOLDOWN * cooldownScale;
+  const rapidScale = rapidEndTime > 0 ? ABILITY_RAPID_MULTIPLIER : 1;
+  fireCooldown = FIRE_COOLDOWN * cooldownScale * rapidScale;
+}
+
+// --- Active abilities ---
+
+function useBomb() {
+  if (bombCooldown > 0) return;
+  bombCooldown = ABILITY_BOMB_COOLDOWN;
+  // Wipe every non-boss enemy on screen. Bosses are too tough for the bomb.
+  for (let i = drones.length - 1; i >= 0; i--) {
+    if (drones[i].type === 'boss') continue;
+    scene.remove(drones[i].mesh);
+    drones.splice(i, 1);
+  }
+  playHit();
+  updateAbilityHUD({ bomb: bombCooldown, rapid: rapidCooldown, heal: healCooldown, rapidEndTime });
+}
+
+function useRapid() {
+  if (rapidCooldown > 0) return;
+  rapidCooldown = ABILITY_RAPID_COOLDOWN;
+  rapidEndTime = ABILITY_RAPID_DURATION;
+  updateAbilityHUD({ bomb: bombCooldown, rapid: rapidCooldown, heal: healCooldown, rapidEndTime });
+}
+
+function useHeal() {
+  if (healCooldown > 0) return;
+  healCooldown = ABILITY_HEAL_COOLDOWN;
+  baseHp = Math.min(maxHpNow, baseHp + ABILITY_HEAL_AMOUNT);
+  updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
+  updateAbilityHUD({ bomb: bombCooldown, rapid: rapidCooldown, heal: healCooldown, rapidEndTime });
+}
+
+function updateAbilities(dt) {
+  let changed = false;
+  if (bombCooldown > 0) { bombCooldown = Math.max(0, bombCooldown - dt); changed = true; }
+  if (rapidCooldown > 0) { rapidCooldown = Math.max(0, rapidCooldown - dt); changed = true; }
+  if (healCooldown > 0) { healCooldown = Math.max(0, healCooldown - dt); changed = true; }
+  if (rapidEndTime > 0) {
+    rapidEndTime = Math.max(0, rapidEndTime - dt);
+    changed = true;
+  }
+  if (changed) updateAbilityHUD({ bomb: bombCooldown, rapid: rapidCooldown, heal: healCooldown, rapidEndTime });
+}
+
+function resetAbilityCooldowns() {
+  bombCooldown = 0;
+  rapidCooldown = 0;
+  healCooldown = 0;
+  rapidEndTime = 0;
 }
 
 function updateShots(dt) {
@@ -688,10 +763,12 @@ function restart() {
   shots.length = 0;
 
   resetAbilities();
+  resetAbilityCooldowns();
   baseHp = BASE_HP;
   wave = START_WAVE;
   gameOver = false;
   won = false;
+  runStarted = true;
   runTime = 0;
   firing = false;
   fireCooldown = 0;
@@ -702,6 +779,7 @@ function restart() {
 
   hideGameOver();
   hideWin();
+  hideStartScreen();
   beginWavePause(START_WAVE); // a fresh pause, then the first wave (START_WAVE, for testing)
   updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
 }
@@ -735,6 +813,14 @@ function loadModels() {
   ]);
 }
 
+// Begin the first run after the player clicks or presses Space through the title screen.
+function startRun() {
+  if (runStarted) return;
+  runStarted = true;
+  hideStartScreen();
+  beginWavePause(START_WAVE);
+}
+
 async function start() {
   const [baseGltf, turretGltf, droneGltf] = await loadModels();
 
@@ -749,7 +835,8 @@ async function start() {
 
   initUI();
   updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
-  beginWavePause(START_WAVE); // open the run with the same pause every wave gets
+  updateAbilityHUD({ bomb: 0, rapid: 0, heal: 0, rapidEndTime: 0 });
+  showStartScreen();               // wait for the player to click / press Space
   lastFrameTime = performance.now(); // so the first frame's delta is not the whole load time
   renderer.setAnimationLoop(frame);
 }
@@ -771,13 +858,14 @@ function frame() {
   updateFps(frameSeconds);
 
   updateAim();
-  if (!gameOver && !won) {
+  if (!gameOver && !won && runStarted) {
     runTime += dt;     // the run clock; it stops the moment the run ends either way
     updateWaves(dt);
     updateSpawning(dt);
     if (waveInProgress) updateFiring(dt); // no shooting during the pause
     updateShots(dt);   // shots first, so a hit pops the drone on the same frame
     updateDrones(dt);
+    updateAbilities(dt);
   }
 
   renderer.render(scene, camera);
