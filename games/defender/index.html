@@ -21,6 +21,9 @@
       border-radius: 3px; background: rgba(0, 0, 0, 0.55); overflow: hidden; }
     #hp-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #ff7a4d, #ffd98a); }
     #hp-label { font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.9; }
+    #abilities { display: flex; gap: 14px; margin-left: auto; font: 600 13px/1.2 system-ui, sans-serif; }
+    #abilities span { opacity: 0.75; }
+    #abilities span.ready { opacity: 1; color: #ffd98a; }
 
     /* Big "Wave N" in the middle of the screen, during the pause between waves. */
     #wave-announce { position: fixed; inset: 0; display: grid; place-content: center;
@@ -106,6 +109,11 @@
     <div>Wave <span id="wave-value">1</span></div>
     <div id="hp-wrap"><div id="hp-bar"></div></div>
     <div id="hp-label">HP 100 / 100</div>
+    <div id="abilities">
+      <span id="ability-bomb">Space: Bomb — ready</span>
+      <span id="ability-rapid">Shift: Rapid — ready</span>
+      <span id="ability-heal">H: Heal — ready</span>
+    </div>
   </div>
   <div id="wave-announce" hidden>Wave 1</div>
   <div id="damage-flash"></div>
