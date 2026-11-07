@@ -64,6 +64,16 @@
     #win-screen p { margin: 0; }
     #win-screen kbd { padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.4);
       border-radius: 4px; background: rgba(255, 255, 255, 0.12); font: inherit; }
+
+    /* Start screen: title and controls, shown until the player starts the run. */
+    #start-screen { position: fixed; inset: 0; display: grid; place-content: center; gap: 10px;
+      text-align: center; background: rgba(12, 7, 5, 0.88); color: #f6efe4; cursor: pointer;
+      font: 16px/1.5 system-ui, sans-serif; z-index: 10; }
+    #start-screen[hidden] { display: none; }
+    #start-screen h1 { margin: 0 0 8px; font-size: clamp(44px, 8vw, 72px); letter-spacing: 0.1em; color: #ffd98a; }
+    #start-screen p { margin: 0; opacity: 0.85; }
+    #start-screen kbd { padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 4px; background: rgba(255, 255, 255, 0.12); font: inherit; }
   </style>
   <!-- three.js comes from a CDN, pinned to one version. No install needed. -->
   <script type="importmap">
@@ -109,6 +119,14 @@
     <p>You held the rig through <strong>wave <span id="win-wave">20</span></strong>.</p>
     <p>Time: <strong><span id="win-time">0.0s</span></strong></p>
     <p>Press <kbd>R</kbd> to restart.</p>
+  </div>
+
+  <!-- Start screen: title and controls, shown until the player clicks or presses Space. -->
+  <div id="start-screen">
+    <h1>BASE DEFENDER</h1>
+    <p>Hold the rig through <strong>20 waves</strong>.</p>
+    <p>Move the mouse to aim. Hold <kbd>left click</kbd> to fire arrows.</p>
+    <p>Click or press <kbd>Space</kbd> to start.</p>
   </div>
 
   <!-- If three.js (from the internet) or main.js fails to load, say so instead of showing a blank page. -->

@@ -61,6 +61,8 @@ import {
   flashBaseDamage,
   showWaveAnnounce,
   hideWaveAnnounce,
+  showStartScreen,
+  hideStartScreen,
 } from './ui.js';
 import { groundTexture } from './textures.js';
 import { initAudio, playShoot, playHit, playDamage } from './sounds.js';
@@ -233,6 +235,7 @@ let waveCorners = [];                // [signX, signZ] corners this wave spawns 
 let cornerCursor = 0;                // which of those corners is next in line
 let gameOver = false;
 let won = false;                     // true once wave WIN_WAVE is cleared
+let runStarted = false;              // true once the player clicks through the start screen
 let runTime = 0;                     // seconds this run has lasted, stopped when it ends
 let firing = false;
 let fireCooldown = 0;
@@ -267,6 +270,7 @@ addEventListener('pointermove', (event) => {
 addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return; // left button only (right-click is for walls in M3)
   initAudio();                    // the first click is the gesture that starts the audio context
+  if (!runStarted) { startRun(); return; } // click through the title screen
   pointer.x = (event.clientX / innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / innerHeight) * 2 + 1;
   updateAim();                    // face where the click/tap landed
@@ -284,7 +288,9 @@ addEventListener('blur', () => { firing = false; });          // no stuck trigge
 addEventListener('contextmenu', (event) => event.preventDefault());
 
 addEventListener('keydown', (event) => {
-  if ((event.key === 'r' || event.key === 'R') && loadingEl.hidden) restart();
+  if (!loadingEl.hidden) return;
+  if (event.key === 'r' || event.key === 'R') restart();
+  if ((event.key === ' ' || event.code === 'Space') && !runStarted) startRun();
 });
 
 // --- Shooting ---
@@ -692,6 +698,7 @@ function restart() {
   wave = START_WAVE;
   gameOver = false;
   won = false;
+  runStarted = true;
   runTime = 0;
   firing = false;
   fireCooldown = 0;
@@ -702,6 +709,7 @@ function restart() {
 
   hideGameOver();
   hideWin();
+  hideStartScreen();
   beginWavePause(START_WAVE); // a fresh pause, then the first wave (START_WAVE, for testing)
   updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
 }
@@ -735,6 +743,14 @@ function loadModels() {
   ]);
 }
 
+// Begin the first run after the player clicks or presses Space through the title screen.
+function startRun() {
+  if (runStarted) return;
+  runStarted = true;
+  hideStartScreen();
+  beginWavePause(START_WAVE);
+}
+
 async function start() {
   const [baseGltf, turretGltf, droneGltf] = await loadModels();
 
@@ -749,7 +765,7 @@ async function start() {
 
   initUI();
   updateUI({ wave, hp: baseHp, maxHp: maxHpNow });
-  beginWavePause(START_WAVE); // open the run with the same pause every wave gets
+  showStartScreen();               // wait for the player to click / press Space
   lastFrameTime = performance.now(); // so the first frame's delta is not the whole load time
   renderer.setAnimationLoop(frame);
 }
@@ -771,7 +787,7 @@ function frame() {
   updateFps(frameSeconds);
 
   updateAim();
-  if (!gameOver && !won) {
+  if (!gameOver && !won && runStarted) {
     runTime += dt;     // the run clock; it stops the moment the run ends either way
     updateWaves(dt);
     updateSpawning(dt);

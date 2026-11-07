@@ -14,6 +14,17 @@ export function initUI() {
   el.win = document.getElementById('win-screen');
   el.winWave = document.getElementById('win-wave');
   el.winTime = document.getElementById('win-time');
+  el.start = document.getElementById('start-screen');
+}
+
+// Show the title screen on first load.
+export function showStartScreen() {
+  el.start.hidden = false;
+}
+
+// Hide the title screen once the player starts the run.
+export function hideStartScreen() {
+  el.start.hidden = true;
 }
 
 // Draw the current run's numbers: the wave reached and how much base health is left.
